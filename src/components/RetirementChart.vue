@@ -2,238 +2,307 @@
 <template>
   <div>
     <div class="retirement-header">
-      <h2>401(k) balance at retirement</h2>
+      <span class="label">Projected 401(k) balance at retirement</span>
       <div class="balance-amount">
-        ${{ projectedRetirementBalance.toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
+        <span class="currency">$</span>{{ formattedRetirementBalance }}
       </div>
     </div>
 
     <div class="chart-container">
-      <ZingChart
-        :data="chartConfig"
-        :height="400"
-        :width="'100%'"
-        ref="chart"
+      <apexchart
+        type="area"
+        :height="CHART_HEIGHT"
+        :options="chartOptions"
+        :series="chartSeries"
       />
     </div>
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue'
-import ZingChart from 'zingchart-vue'
+import { defineComponent, computed, type PropType } from 'vue'
+import VueApexCharts from 'vue3-apexcharts'
+import type { ApexOptions } from 'apexcharts'
+
+// Constants
+const CHART_HEIGHT = 400
+const MAX_X_AXIS_TICKS = 10
+
+const COLORS = {
+  primary: '#023149',
+  contributions: '#60a5fa',
+  employerMatch: '#f59e0b',
+  investmentReturns: '#10b981',
+  border: '#e5e7eb',
+  gridLine: '#d1d5db'
+} as const
+
+const FONT_FAMILY = 'Poppins, sans-serif'
+
+// Types
+interface ChartData {
+  ages: number[]
+  contributions: number[]
+  employerMatch: number[]
+  investmentReturns: number[]
+}
+
+interface TooltipParams {
+  series: number[][]
+  seriesIndex: number
+  dataPointIndex: number
+  w: {
+    globals: {
+      categoryLabels: string[]
+      colors: string[]
+      seriesNames: string[]
+    }
+  }
+}
+
+// Helper functions
+function formatCurrency(value: number): string {
+  return '$' + value.toLocaleString()
+}
+
+function buildTooltipHtml({ series, dataPointIndex, w }: TooltipParams): string {
+  const age = w.globals.categoryLabels[dataPointIndex]
+  const colors = w.globals.colors
+  const names = w.globals.seriesNames
+
+  const headerHtml = `
+    <div style="
+      text-align: center;
+      font-size: 15px;
+      font-weight: 700;
+      padding-bottom: 8px;
+      border-bottom: 1px solid ${COLORS.border};
+      color: ${COLORS.primary};
+    ">
+      Age: ${age}
+    </div>
+  `
+
+  const rowsHtml = series.map((s, i) => {
+    const value = s[dataPointIndex]
+    const isLast = i === series.length - 1
+    const borderStyle = !isLast ? `border-bottom: 1px solid ${COLORS.border};` : ''
+
+    return `
+      <div style="
+        display: flex;
+        align-items: center;
+        padding: 6px 0;
+        ${borderStyle}
+        font-size: 12px;
+        font-weight: 500;
+        color: ${COLORS.primary};
+      ">
+        <span style="
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: ${colors[i]};
+          margin-right: 8px;
+        "></span>
+        <span style="flex: 1; margin-right: 16px;">${names[i]}:</span>
+        <span style="font-weight: 600;">${formatCurrency(value)}</span>
+      </div>
+    `
+  }).join('')
+
+  return `
+    <div style="padding: 12px; font-family: ${FONT_FAMILY};">
+      ${headerHtml}
+      ${rowsHtml}
+    </div>
+  `
+}
 
 export default defineComponent({
   name: 'RetirementChart',
 
   components: {
-    ZingChart
+    apexchart: VueApexCharts
   },
 
   props: {
     currentAge: {
-      type: Number,
+      type: Number as PropType<number>,
       required: true
     },
     retirementAge: {
-      type: Number,
+      type: Number as PropType<number>,
       required: true
     },
     currentBalance: {
-      type: Number,
+      type: Number as PropType<number>,
       required: true
     },
     totalAnnualContribution: {
-      type: Number,
+      type: Number as PropType<number>,
       required: true
     },
     projectedAnnualContribution: {
-      type: Number,
+      type: Number as PropType<number>,
       required: true
     },
     employerMatchAmount: {
-      type: Number,
+      type: Number as PropType<number>,
       required: true
     },
     averageAnnualReturn: {
-      type: Number,
+      type: Number as PropType<number>,
       required: true
     }
   },
 
-  computed: {
-    projectedRetirementBalance() {
-      const yearsUntilRetirement = this.retirementAge - this.currentAge
-      let balance = this.currentBalance
+  setup(props) {
+    const CHART_COLORS = [
+      COLORS.contributions,
+      COLORS.employerMatch,
+      COLORS.investmentReturns
+    ]
 
-      for (let year = 0; year < yearsUntilRetirement; year++) {
-        balance = balance * (1 + this.averageAnnualReturn)
-        balance += this.totalAnnualContribution
+    const yearsUntilRetirement = computed(() =>
+      Math.max(0, props.retirementAge - props.currentAge)
+    )
+
+    const projectedRetirementBalance = computed(() => {
+      let balance = props.currentBalance
+      for (let year = 0; year < yearsUntilRetirement.value; year++) {
+        balance = balance * (1 + props.averageAnnualReturn)
+        balance += props.totalAnnualContribution
       }
-
       return balance
-    },
+    })
 
-    chartConfig(): any {
-      const yearsUntilRetirement = Math.max(0, this.retirementAge - this.currentAge)
+    const formattedRetirementBalance = computed(() =>
+      projectedRetirementBalance.value.toLocaleString('en-US', { maximumFractionDigits: 0 })
+    )
 
-      const ages: number[] = []
-      const contributions: number[] = []
-      const employerMatch: number[] = []
-      const investmentReturns: number[] = []
+    const chartData = computed<ChartData>(() => {
+      const ages: number[] = [props.currentAge]
+      const contributions: number[] = [0]
+      const employerMatch: number[] = [0]
+      const investmentReturns: number[] = [props.currentBalance]
 
       let totalContributions = 0
       let totalEmployerMatch = 0
-      let totalBalance = this.currentBalance
+      let totalBalance = props.currentBalance
 
-      ages.push(this.currentAge)
-      contributions.push(totalContributions)
-      employerMatch.push(totalEmployerMatch)
-      investmentReturns.push(this.currentBalance)
-
-      for (let year = 1; year <= yearsUntilRetirement; year++) {
-        totalContributions += this.projectedAnnualContribution
-        totalEmployerMatch += this.employerMatchAmount
-
-        totalBalance = totalBalance * (1 + this.averageAnnualReturn)
-        totalBalance += this.totalAnnualContribution
+      for (let year = 1; year <= yearsUntilRetirement.value; year++) {
+        totalContributions += props.projectedAnnualContribution
+        totalEmployerMatch += props.employerMatchAmount
+        totalBalance = totalBalance * (1 + props.averageAnnualReturn) + props.totalAnnualContribution
 
         const investmentGrowth = totalBalance - totalContributions - totalEmployerMatch
 
-        ages.push(this.currentAge + year)
+        ages.push(props.currentAge + year)
         contributions.push(Math.round(totalContributions))
         employerMatch.push(Math.round(totalEmployerMatch))
         investmentReturns.push(Math.round(investmentGrowth))
       }
 
-      const series = [
-        {
-          values: contributions,
-          text: 'Contributions',
-          'line-color': '#60a5fa',
-          'background-color': '#60a5fa',
-          'alpha-area': 0.8,
-          'line-width': 2
-        },
-        {
-          values: employerMatch,
-          text: 'Employer match',
-          'line-color': '#f59e0b',
-          'background-color': '#f59e0b',
-          'alpha-area': 0.8,
-          'line-width': 2
-        },
-        {
-          values: investmentReturns,
-          text: 'Investment returns',
-          'line-color': '#10b981',
-          'background-color': '#10b981',
-          'alpha-area': 0.8,
-          'line-width': 2
-        }
-      ]
+      return { ages, contributions, employerMatch, investmentReturns }
+    })
 
-      const lastPlotIndex = series.length - 1
+    const chartSeries = computed(() => [
+      { name: 'Contributions', data: chartData.value.contributions },
+      { name: 'Employer Match', data: chartData.value.employerMatch },
+      { name: 'Investment Returns', data: chartData.value.investmentReturns }
+    ])
+
+    const chartOptions = computed<ApexOptions>(() => {
+      const { ages } = chartData.value
 
       return {
-        type: 'area',
-        'background-color': '#ffffff',
-        stacked: true,
-        globals: {
-          fontFamily: 'Poppins, sans-serif'
-        },
-        plotarea: {
-          margin: '50 50 80 80'
-        },
-        plot: {
+        chart: {
+          type: 'area',
           stacked: true,
-          'stack-type': 'normal',
-          aspect: 'spline',
-          marker: { visible: false },
-          tooltip: { visible: false }
-        },
-        'crosshair-x': {
-          shared: true,
-          'line-color': '#cbd5e1',
-          'scale-label': { visible: false },
-          'plot-label': {
-            'html-mode': true,
-            text: '%t: $%v',
-            multiple: false,
-            'background-color': '#ffffff',
-            'border-color': '#e5e7eb',
-            'border-width': 1,
-            padding: '10px',
-            'font-family': 'Poppins',
-            'font-size': 12,
-            color: '#111827',
-            shadow: false,
-            'thousands-separator': ',',
-            decimals: 0,
-            rules: [
-              {
-                rule: 'true',
-                text: '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:%color;margin-right:6px"></span>%t: $%v'
-              },
-              {
-                rule: `%plot-index==${lastPlotIndex}`,
-                text: '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:%color;margin-right:6px"></span>%t: $%v<br><span style="font-weight:600">Total:</span> $%stack-total'
-              }
-            ]
+          fontFamily: FONT_FAMILY,
+          toolbar: { show: false },
+          animations: {
+            enabled: true,
+            easing: 'easeinout',
+            speed: 600
           }
         },
-        'scale-x': {
-          values: ages,
-          label: {
+        colors: CHART_COLORS,
+        dataLabels: { enabled: false },
+        stroke: {
+          curve: 'straight',
+          width: 2
+        },
+        fill: {
+          type: 'gradient',
+          gradient: {
+            shadeIntensity: 0.5,
+            opacityFrom: 0.9,
+            opacityTo: 0.6,
+            stops: [0, 100]
+          }
+        },
+        xaxis: {
+          categories: ages,
+          tickAmount: Math.min(ages.length - 1, MAX_X_AXIS_TICKS),
+          tooltip: { enabled: false },
+          title: {
             text: 'Age',
-            'font-size': 12,
-            'font-color': '#023149',
-            'font-family': 'Poppins'
+            style: {
+              fontSize: '12px',
+              fontWeight: 1000,
+              color: COLORS.primary
+            }
           },
-          item: {
-            'font-size': 11,
-            'font-color': '#023149',
-            'font-family': 'Poppins'
+          labels: {
+            style: {
+              fontSize: '11px',
+              colors: COLORS.primary
+            }
           },
-          'line-color': '#e5e7eb',
-          tick: { 'line-color': '#e5e7eb' }
+          axisBorder: { color: COLORS.border },
+          axisTicks: { color: COLORS.border }
         },
-        'scale-y': {
-          label: {
-            text: '',
-            'font-size': 12,
-            'font-family': 'Poppins'
-          },
-          format: '$%v ',
-          'thousands-separator': ',',
-          item: {
-            'font-size': 11,
-            'font-color': '#023149',
-            'font-family': 'Poppins'
-          },
-          'line-color': '#e5e7eb',
-          tick: { 'line-color': '#e5e7eb' },
-          guide: {
-            'line-style': 'solid',
-            'line-color': '#f3f4f6',
-            alpha: 1
+        yaxis: {
+          labels: {
+            formatter: formatCurrency,
+            style: {
+              fontSize: '11px',
+              colors: COLORS.primary
+            }
           }
+        },
+        grid: {
+          borderColor: COLORS.gridLine,
+          strokeDashArray: 0
         },
         legend: {
-          layout: 'horizontal',
-          align: 'center',
-          'vertical-align': 'bottom',
-          'border-width': 0,
-          'background-color': 'none',
-          item: {
-            'font-size': 11,
-            'font-color': '#023149',
-            'font-family': 'Poppins'
+          position: 'bottom',
+          horizontalAlign: 'center',
+          fontSize: '12px',
+          fontWeight: 500,
+          labels: { colors: COLORS.primary },
+          markers: {
+            width: 10,
+            height: 10,
+            radius: 10
           },
-          marker: { type: 'circle', size: 8 }
+          itemMargin: { horizontal: 12 }
         },
-        series
+        tooltip: {
+          shared: true,
+          intersect: false,
+          custom: buildTooltipHtml
+        }
       }
+    })
+
+    return {
+      CHART_HEIGHT,
+      formattedRetirementBalance,
+      chartSeries,
+      chartOptions
     }
   }
 })
@@ -241,13 +310,35 @@ export default defineComponent({
 
 <style scoped>
 .retirement-header {
-  margin-bottom: 16px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.retirement-header .label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 50px;
+  margin-bottom: 8px;
 }
 
 .balance-amount {
-  font-size: 2.8rem;
-  font-weight: 600;
+  font-size: 3rem;
+  font-weight: 700;
   color: #023149;
+  letter-spacing: -1px;
+  padding-bottom: 12px;
+}
+
+.balance-amount .currency {
+  font-size: 1.8rem;
+  font-weight: 600;
+  vertical-align: top;
+  margin-right: 2px;
+  color: #0fa5a3;
 }
 
 .chart-container {
