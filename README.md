@@ -60,8 +60,8 @@ If you need to install or update Node.js, download it from [nodejs.org](https://
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd 401k-contribution-manager
+git clone https://github.com/julkwak/401k-calculator.git
+cd 401k-calculator
 ```
 
 2. Install dependencies:
