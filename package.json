@@ -9,10 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "vue": "^3.5.22",
-    "primevue": "^4.4.1",
-    "primeicons": "^7.0.0",
     "@primevue/themes": "^4.4.1",
+    "apexcharts": "^5.3.6",
+    "primeicons": "^7.0.0",
+    "primevue": "^4.4.1",
+    "vue": "^3.5.22",
+    "vue3-apexcharts": "^1.10.0",
     "zingchart": "^2.9.16-1",
     "zingchart-vue": "^3.0.1"
   },
