@@ -4,7 +4,6 @@
     <div class="header">
       <img :src="logo" alt="Company Logo" class="company-logo" />
     </div>
-    
     <h1>401(k) Contribution Manager</h1>
     
     <div class="description-section">
@@ -47,11 +46,13 @@
             @update:dollarAmount="dollarAmount = $event"
           />
           
-          <EmployerMatchInput 
+          <EmployerMatchInput
             :employerMatchRate="employerMatchRate"
             :employerMatchLimit="employerMatchLimit"
+            :employerMatchCapPct="employerMatchCapPct"
             @update:employerMatchRate="employerMatchRate = $event"
             @update:employerMatchLimit="employerMatchLimit = $event"
+            @update:employerMatchCapPct="employerMatchCapPct = $event"
           />
           
           <ReturnRateInput 
