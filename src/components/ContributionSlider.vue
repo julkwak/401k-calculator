@@ -9,7 +9,7 @@
             v-model="localPercentage"
             :min="0"
             :max="20"
-            :step="0.5"
+            :step="0"
             :minFractionDigits="1"
             :maxFractionDigits="1"
           />
@@ -49,7 +49,7 @@
             v-model="localDollar"
             :min="0"
             :max="2000"
-            :step="50"
+            :step="0"
             :useGrouping="true"
           />
         </InputGroup>
